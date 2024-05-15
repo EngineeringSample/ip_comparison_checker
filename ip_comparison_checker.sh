@@ -10,7 +10,7 @@ NC='\033[0m' # No Color
 
 # --- Functions ---
 
-# Function to obtain public IP address
+# Function to obtain public IP address 
 get_public_ip() {
   local ip=$(curl -s https://ipinfo.io/ip)
   if [[ ! "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -50,6 +50,14 @@ get_info_from_db() {
 
 # --- Main Script ---
 
+# Platforms (for labeling) - we use the same method (curl) for all 
+platforms=(
+  "a:curl"
+  "b:curl"
+  "c:curl"
+  "d:curl"
+)
+
 # IP databases to use
 databases=(
   "whois"
@@ -60,42 +68,59 @@ databases=(
 
 # --- IP Address Retrieval ---
 
+echo -e "${GREEN}--- IP Address Retrieval ---${NC}"
 public_ip=$(get_public_ip)
 if [[ $? -ne 0 ]]; then
   echo -e "${RED}Exiting due to error retrieving public IP.${NC}"
   exit 1
 fi
 
-echo -e "${GREEN}--- Public IP Address: $public_ip ---${NC}\n"
+for platform in "${platforms[@]}"; do
+  platform_name=${platform%:*}
+  echo -e "Platform $platform_name: $public_ip"
+done
+
+echo 
 
 # --- Database Information Retrieval ---
 
 echo -e "${GREEN}--- Information from Databases ---${NC}"
-database_info=()
+platform_info=() # Array to store information for each platform
 
-for database in "${databases[@]}"; do
-  info=$(get_info_from_db "$public_ip" "$database")
-  if [[ $? -ne 0 ]]; then
-    echo -e "${RED}Error retrieving information from $database. Skipping...${NC}"
-    continue
-  fi
-
-  database_info+=("$info")
-  echo -e "${GREEN}Database: $database${NC}"
-  echo "$info"
-  echo # Add a line break after each database
+for platform in "${platforms[@]}"; do
+  platform_name=${platform%:*}
+  echo -e "Platform $platform_name:"
+  
+  for database in "${databases[@]}"; do
+    info=$(get_info_from_db "$public_ip" "$database")
+    if [[ $? -ne 0 ]]; then
+      echo -e "  ${RED}Error retrieving information from $database. Skipping...${NC}"
+      continue
+    fi
+    platform_info+=("$platform_name:$database:$info") # Store in platform_info
+    echo -e "  ${GREEN}$database:${NC}"
+    echo "    $info" 
+  done
+  echo # Add line break after each platform 
 done
 
 # --- Data Comparison & Analysis ---
 
-echo -e "${GREEN}--- Comparison ---${NC}"
+echo -e "${GREEN}--- Basic Comparison ---${NC}"
 
-for field in "ASN" "Country" "Region" "City" "Organization"; do
-  echo -e "${GREEN}Field: $field${NC}"
-  for i in "${!databases[@]}"; do
-    database=${databases[$i]}
-    value=$(echo "${database_info[$i]}" | awk -v field="$field" '{for(i=1;i<=NF;i++) {if ($i ~ field || $i ~ tolower(field)) {print $(i+1)}}}' | tr '\n' ' ')
-    echo -e "  $database: $value"
+for database in "${databases[@]}"; do
+  echo -e "${GREEN}Database: $database${NC}" 
+
+  for field in "ASN" "Country" "Region" "City" "Organization"; do 
+    values=$(echo "${platform_info[@]}" | grep "$database:" | awk -v field="$field" '{for(i=1;i<=NF;i++) {if ($i ~ field || $i ~ tolower(field)) {print $(i+1)}}}' | sort | uniq) 
+    num_values=$(echo "$values" | wc -l)
+
+    if [[ $num_values -eq 1 ]]; then
+      echo -e "  ${GREEN}$field: Consistent ($values)${NC}"
+    else
+      echo -e "  ${RED}$field: Discrepancies${NC}"
+      echo "    $values"
+    fi
   done
-  echo
+  echo # Add a line break between databases
 done
