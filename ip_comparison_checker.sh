@@ -8,27 +8,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
-# Function to obtain IP address using different methods
-get_ip() {
-  method=$1
-  case $method in
-    "ip")
-      ip a show scope global | grep -oE 'inet ([0-9]{1,3}\.){3}[0-9]{1,3}' | awk '{print $2}'
-      ;;
-    "hostname")
-      hostname -I | awk '{print $1}'
-      ;;
-    "ifconfig")
-      ifconfig | grep -oE 'inet ([0-9]{1,3}\.){3}[0-9]{1,3}' | awk '{print $2}'
-      ;;
-    "curl")
-      curl -s https://ipinfo.io/ip
-      ;;
-    *)
-      echo "Invalid method: $method" >&2
-      return 1
-      ;;
-  esac
+# --- Functions ---
+
+# Function to obtain public IP address 
+get_public_ip() {
+  curl -s https://ipinfo.io/ip 
 }
 
 # Function to obtain information from a specific database
@@ -57,14 +41,6 @@ get_info_from_db() {
 
 # --- Main Script ---
 
-# Platforms and their corresponding methods
-platforms=(
-  "a:ip"
-  "b:hostname"
-  "c:ifconfig"
-  "d:curl"
-)
-
 # IP databases to use
 databases=(
   "whois"
@@ -73,63 +49,40 @@ databases=(
   "RIPE"
 )
 
-# Initialize data structures to store results
-ip_addresses=()
-info_data=()
+# Get public IP (we only need it once)
+public_ip=$(get_public_ip)
+if [[ $? -ne 0 ]]; then
+  echo -e "${RED}Error retrieving public IP address. Exiting.${NC}"
+  exit 1
+fi
 
-# --- IP Address Retrieval --- 
-
-echo -e "${GREEN}--- IP Address Retrieval ---${NC}"
-for platform in "${platforms[@]}"; do
-  platform_name=${platform%:*}
-  method=${platform#*:}
-
-  ip=$(get_ip $method)
-  if [[ $? -ne 0 ]]; then
-    echo -e "${RED}Error retrieving IP for platform $platform_name${NC}"
-    continue # Skip to the next platform if there's an error
-  fi
-
-  ip_addresses+=("$platform_name:$ip")
-  echo -e "Platform $platform_name: $ip"
-done
+echo -e "${GREEN}--- Public IP Address: $public_ip ---${NC}\n"
 
 # --- Database Information Retrieval ---
 
-echo -e "\n${GREEN}--- Information from Databases ---${NC}"
-for platform in "${platforms[@]}"; do
-  platform_name=${platform%:*}
-  ip=$(echo "${ip_addresses[@]}" | grep "$platform_name:" | cut -d: -f2)
-
-  echo -e "Platform $platform_name:"
-  for database in "${databases[@]}"; do
-    info=$(get_info_from_db $ip $database)
-    if [[ $? -ne 0 ]]; then
-      echo -e "  ${RED}Error retrieving information from $database${NC}"
-      continue 
-    fi
-
-    info_data+=("$platform_name:$database:$info")
-    echo -e "  ${GREEN}$database:${NC}"
-    echo -e "    $info"
-  done
-done
-
-# --- Data Comparison & Analysis (Basic) --- 
-
-echo -e "\n${GREEN}--- Basic Comparison ---${NC}"
-
+echo -e "${GREEN}--- Information from Databases ---${NC}"
 for database in "${databases[@]}"; do
-  echo -e "${GREEN}Database: $database${NC}" 
-  for field in "ASN" "Country" "Region" "City"; do # Fields to compare
-    values=$(echo "${info_data[@]}" | grep "$database:" | awk -v field="$field" '{for(i=1;i<=NF;i++) {if ($i ~ field) {print $(i+1)}}}' | sort | uniq) 
-    num_values=$(echo "$values" | wc -l)
-    if [[ $num_values -eq 1 ]]; then
-      echo -e "  ${GREEN}$field: Consistent ($values)${NC}"
-    else
-      echo -e "  ${RED}$field: Discrepancies${NC}"
-      echo -e "    $values"
+    info=$(get_info_from_db "$public_ip" "$database")
+    if [[ $? -ne 0 ]]; then
+      echo -e "${RED}Error retrieving information from $database${NC}"
+      continue
     fi
-  done
-  echo "" # Add a line break between databases
+
+    echo -e "${GREEN}Database: $database${NC}"
+    echo "$info"  
+    echo # Add a line break after each database
 done
+
+# --- Data Comparison & Analysis --- 
+
+echo -e "${GREEN}--- Comparison ---${NC}"
+
+for field in "ASN" "Country" "Region" "City"; do 
+  echo -e "${GREEN}Field: $field${NC}"
+
+  for database in "${databases[@]}"; do
+    value=$(echo "$info" | awk -v field="$field" '{for(i=1;i<=NF;i++) {if ($i ~ field) {print $(i+1)}}}')
+    echo -e "  $database: $value" 
+  done 
+  echo  
+done 
