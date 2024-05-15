@@ -61,6 +61,8 @@ echo -e "${GREEN}--- Public IP Address: $public_ip ---${NC}\n"
 # --- Database Information Retrieval ---
 
 echo -e "${GREEN}--- Information from Databases ---${NC}"
+database_info=() # Array to store information from each database
+
 for database in "${databases[@]}"; do
     info=$(get_info_from_db "$public_ip" "$database")
     if [[ $? -ne 0 ]]; then
@@ -68,6 +70,7 @@ for database in "${databases[@]}"; do
       continue
     fi
 
+    database_info+=("$info") # Store the information in the array
     echo -e "${GREEN}Database: $database${NC}"
     echo "$info"  
     echo # Add a line break after each database
@@ -77,11 +80,11 @@ done
 
 echo -e "${GREEN}--- Comparison ---${NC}"
 
-for field in "ASN" "Country" "Region" "City"; do 
+for field in "ASN" "Country" "Region" "City" "Organization"; do 
   echo -e "${GREEN}Field: $field${NC}"
-
-  for database in "${databases[@]}"; do
-    value=$(echo "$info" | awk -v field="$field" '{for(i=1;i<=NF;i++) {if ($i ~ field) {print $(i+1)}}}')
+  for i in "${!databases[@]}"; do # Iterate using array indices
+    database=${databases[$i]}
+    value=$(echo "${database_info[$i]}" | awk -v field="$field" '{for(i=1;i<=NF;i++) {if ($i ~ field) {print $(i+1)}}}' | tr '\n' ' ')
     echo -e "  $database: $value" 
   done 
   echo  
