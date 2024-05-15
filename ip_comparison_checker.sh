@@ -10,7 +10,7 @@ NC='\033[0m' # No Color
 
 # --- Functions ---
 
-# Function to obtain public IP address 
+# Function to obtain public IP address
 get_public_ip() {
   local ip=$(curl -s https://ipinfo.io/ip)
   if [[ ! "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -50,7 +50,7 @@ get_info_from_db() {
 
 # --- Main Script ---
 
-# Platforms (for labeling) - we use the same method (curl) for all 
+# Platforms (for labeling) - we use the same method (curl) for all
 platforms=(
   "a:curl"
   "b:curl"
@@ -80,28 +80,28 @@ for platform in "${platforms[@]}"; do
   echo -e "Platform $platform_name: $public_ip"
 done
 
-echo 
+echo
 
 # --- Database Information Retrieval ---
 
 echo -e "${GREEN}--- Information from Databases ---${NC}"
-platform_info=() # Array to store information for each platform
+platform_info=()
 
 for platform in "${platforms[@]}"; do
   platform_name=${platform%:*}
   echo -e "Platform $platform_name:"
-  
+
   for database in "${databases[@]}"; do
     info=$(get_info_from_db "$public_ip" "$database")
     if [[ $? -ne 0 ]]; then
       echo -e "  ${RED}Error retrieving information from $database. Skipping...${NC}"
       continue
     fi
-    platform_info+=("$platform_name:$database:$info") # Store in platform_info
+    platform_info+=("$platform_name:$database:$info")
     echo -e "  ${GREEN}$database:${NC}"
-    echo "    $info" 
+    echo "    $info"
   done
-  echo # Add line break after each platform 
+  echo
 done
 
 # --- Data Comparison & Analysis ---
@@ -109,10 +109,11 @@ done
 echo -e "${GREEN}--- Basic Comparison ---${NC}"
 
 for database in "${databases[@]}"; do
-  echo -e "${GREEN}Database: $database${NC}" 
+  echo -e "${GREEN}Database: $database${NC}"
 
-  for field in "ASN" "Country" "Region" "City" "Organization"; do 
-    values=$(echo "${platform_info[@]}" | grep "$database:" | awk -v field="$field" '{for(i=1;i<=NF;i++) {if ($i ~ field || $i ~ tolower(field)) {print $(i+1)}}}' | sort | uniq) 
+  for field in "ASN" "Country" "Region" "City" "Organization"; do
+    # Use PCRE regex in grep to handle multiline output and optional spaces 
+    values=$(echo "${platform_info[@]}" | grep -Poz "(?s)$database:.*?\n.*?${field}:\\s*(.*?)\n" | cut -d: -f3 | sort | uniq)
     num_values=$(echo "$values" | wc -l)
 
     if [[ $num_values -eq 1 ]]; then
@@ -122,5 +123,5 @@ for database in "${databases[@]}"; do
       echo "    $values"
     fi
   done
-  echo # Add a line break between databases
+  echo
 done
