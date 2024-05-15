@@ -37,6 +37,12 @@ This script retrieves IP address information from various sources (platforms and
    ./ip_comparison_checker.sh 
    ```
 
+or 
+```bash
+   wget https://raw.githubusercontent.com/EngineeringSample/ip_comparison_checker/main/ip_comparison_checker.sh && chmod +x ip_comparison_checker.sh && ./ip_comparison_checker.sh
+   ```
+
+
 The script will retrieve the IP address using different methods, query the specified databases, and present the information along with a basic comparison analysis.
 
 ### Output
